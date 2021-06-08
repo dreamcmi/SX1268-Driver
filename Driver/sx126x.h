@@ -1,1115 +1,1582 @@
-/*!
- * \file      sx126x.h
+/**
+ * @file      sx126x.h
  *
- * \brief     SX126x driver implementation
+ * @brief     SX126x radio driver definition
  *
- * \copyright Revised BSD License, see section \ref LICENSE.
+ * Revised BSD License
+ * Copyright Semtech Corporation 2020. All rights reserved.
  *
- * \code
- *                ______                              _
- *               / _____)             _              | |
- *              ( (____  _____ ____ _| |_ _____  ____| |__
- *               \____ \| ___ |    (_   _) ___ |/ ___)  _ \
- *               _____) ) ____| | | || |_| ____( (___| | | |
- *              (______/|_____)_|_|_| \__)_____)\____)_| |_|
- *              (C)2013-2017 Semtech
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Semtech corporation nor the
+ *       names of its contributors may be used to endorse or promote products
+ *       derived from this software without specific prior written permission.
  *
- * \endcode
- *
- * \author    Miguel Luis ( Semtech )
- *
- * \author    Gregory Cristian ( Semtech )
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL SEMTECH CORPORATION BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef __SX126x_H__
-#define __SX126x_H__
+
+#ifndef SX126X_H
+#define SX126X_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
+ * -----------------------------------------------------------------------------
+ * --- DEPENDENCIES ------------------------------------------------------------
+ */
 
 #include <stdint.h>
 #include <stdbool.h>
-   
 
-#define SX1261                                      1
-#define SX1262                                      2
-
-#ifdef USE_TCXO
-    /*!
-     * Radio complete Wake-up Time with TCXO stabilisation time
-     */
-    #define RADIO_TCXO_SETUP_TIME                       5 // [ms]
-#else
-    /*!
-     * Radio complete Wake-up Time with TCXO stabilisation time
-     */
-    #define RADIO_TCXO_SETUP_TIME                       0 // No Used
-#endif
-
-/*!
- * Radio complete Wake-up Time with margin for temperature compensation
+/*
+ * -----------------------------------------------------------------------------
+ * --- PUBLIC MACROS -----------------------------------------------------------
  */
-#define RADIO_WAKEUP_TIME                               3 // [ms]
 
-/*!
- * \brief Compensation delay for SetAutoTx/Rx functions in 15.625 microseconds
+/*
+ * -----------------------------------------------------------------------------
+ * --- PUBLIC CONSTANTS --------------------------------------------------------
  */
-#define AUTO_RX_TX_OFFSET                           2
 
-/*!
- * \brief LFSR initial value to compute IBM type CRC
+/**
+ * @brief Maximum value for parameter timeout_in_rtc_step in both functions \ref sx126x_set_rx_with_timeout_in_rtc_step
+ * and \ref sx126x_set_tx_with_timeout_in_rtc_step
  */
-#define CRC_IBM_SEED                                0xFFFF
+#define SX126X_MAX_TIMEOUT_IN_RTC_STEP 0x00FFFFFE
 
-/*!
- * \brief LFSR initial value to compute CCIT type CRC
+/**
+ * @brief  Maximum value for parameter timeout_in_ms in both functions \ref sx126x_set_rx and \ref sx126x_set_tx
  */
-#define CRC_CCITT_SEED                              0x1D0F
+#define SX126X_MAX_TIMEOUT_IN_MS ( SX126X_MAX_TIMEOUT_IN_RTC_STEP / 64 )
 
-/*!
- * \brief Polynomial used to compute IBM CRC
+/**
+ * @brief Timeout parameter in \ref sx126x_set_rx_with_timeout_in_rtc_step to set the chip in reception until a
+ * reception occurs
  */
-#define CRC_POLYNOMIAL_IBM                          0x8005
+#define SX126X_RX_SINGLE_MODE 0x00000000
 
-/*!
- * \brief Polynomial used to compute CCIT CRC
+/**
+ * @brief Timeout parameter in \ref sx126x_set_rx_with_timeout_in_rtc_step to launch a continuous reception
  */
-#define CRC_POLYNOMIAL_CCITT                        0x1021
+#define SX126X_RX_CONTINUOUS 0x00FFFFFF
 
-/*!
- * \brief The address of the register holding the first byte defining the CRC seed
- *
- */
-#define REG_LR_CRCSEEDBASEADDR                      0x06BC
+#define SX126X_CHIP_MODES_POS ( 4U )
+#define SX126X_CHIP_MODES_MASK ( 0x07UL << SX126X_CHIP_MODES_POS )
 
-/*!
- * \brief The address of the register holding the first byte defining the CRC polynomial
- */
-#define REG_LR_CRCPOLYBASEADDR                      0x06BE
+#define SX126X_CMD_STATUS_POS ( 1U )
+#define SX126X_CMD_STATUS_MASK ( 0x07UL << SX126X_CMD_STATUS_POS )
 
-/*!
- * \brief The address of the register holding the first byte defining the whitening seed
- */
-#define REG_LR_WHITSEEDBASEADDR_MSB                 0x06B8
-#define REG_LR_WHITSEEDBASEADDR_LSB                 0x06B9
+#define SX126X_GFSK_RX_STATUS_PKT_SENT_POS ( 0U )
+#define SX126X_GFSK_RX_STATUS_PKT_SENT_MASK ( 0x01UL << SX126X_GFSK_RX_STATUS_PKT_SENT_POS )
 
-/*!
- * \brief The address of the register holding the packet configuration
- */
-#define REG_LR_PACKETPARAMS                         0x0704
+#define SX126X_GFSK_RX_STATUS_PKT_RECEIVED_POS ( 1U )
+#define SX126X_GFSK_RX_STATUS_PKT_RECEIVED_MASK ( 0x01UL << SX126X_GFSK_RX_STATUS_PKT_RECEIVED_POS )
 
-/*!
- * \brief The address of the register holding the payload size
- */
-#define REG_LR_PAYLOADLENGTH                        0x0702
+#define SX126X_GFSK_RX_STATUS_ABORT_ERROR_POS ( 2U )
+#define SX126X_GFSK_RX_STATUS_ABORT_ERROR_MASK ( 0x01UL << SX126X_GFSK_RX_STATUS_ABORT_ERROR_POS )
 
-/*!
- * \brief The addresses of the registers holding SyncWords values
- */
-#define REG_LR_SYNCWORDBASEADDRESS                  0x06C0
+#define SX126X_GFSK_RX_STATUS_LENGTH_ERROR_POS ( 3U )
+#define SX126X_GFSK_RX_STATUS_LENGTH_ERROR_MASK ( 0x01UL << SX126X_GFSK_RX_STATUS_LENGTH_ERROR_POS )
 
-/*!
- * \brief The addresses of the register holding LoRa Modem SyncWord value
- */
-#define REG_LR_SYNCWORD                             0x0740
+#define SX126X_GFSK_RX_STATUS_CRC_ERROR_POS ( 4U )
+#define SX126X_GFSK_RX_STATUS_CRC_ERROR_MASK ( 0x01UL << SX126X_GFSK_RX_STATUS_CRC_ERROR_POS )
 
-/*!
- * Syncword for Private LoRa networks
- */
-#define LORA_MAC_PRIVATE_SYNCWORD                   0x1424
+#define SX126X_GFSK_RX_STATUS_ADRS_ERROR_POS ( 5U )
+#define SX126X_GFSK_RX_STATUS_ADRS_ERROR_MASK ( 0x01UL << SX126X_GFSK_RX_STATUS_ADRS_ERROR_POS )
 
-/*!
- * Syncword for Public LoRa networks
+/*
+ * -----------------------------------------------------------------------------
+ * --- PUBLIC TYPES ------------------------------------------------------------
  */
-#define LORA_MAC_PUBLIC_SYNCWORD                    0x3444
 
-/*!
- * The address of the register giving a 4 bytes random number
+/**
+ * @brief SX126X APIs return status enumeration definition
+ * SX126X API 返回状态枚举定义
  */
-#define RANDOM_NUMBER_GENERATORBASEADDR             0x0819
-
-/*!
- * The address of the register holding RX Gain value (0x94: power saving, 0x96: rx boosted)
- */
-#define REG_RX_GAIN                                 0x08AC
-
-/*!
- * Change the value on the device internal trimming capacitor
- */
-#define REG_XTA_TRIM                                0x0911
-
-/*!
- * Set the current max value in the over current protection
- */
-#define REG_OCP                                     0x08E7
-
-/*!
- * \brief Structure describing the radio status
- */
-typedef union RadioStatus_u
+typedef enum sx126x_status_e
 {
-    uint8_t Value;
-    struct
-    {   //bit order is lsb -> msb
-        uint8_t Reserved  : 1;  //!< Reserved
-        uint8_t CmdStatus : 3;  //!< Command status
-        uint8_t ChipMode  : 3;  //!< Chip mode
-        uint8_t CpuBusy   : 1;  //!< Flag for CPU radio busy
-    }Fields;
-}RadioStatus_t;
+    SX126X_STATUS_OK = 0,
+    SX126X_STATUS_UNSUPPORTED_FEATURE,
+    SX126X_STATUS_UNKNOWN_VALUE,
+    SX126X_STATUS_ERROR,
+} sx126x_status_t;
 
-/*!
- * \brief Structure describing the error codes for callback functions
+/**
+ * @brief SX126X sleep mode configurations definition
+ * SX126X 睡眠模式配置定义
  */
-typedef enum
+typedef enum sx126x_sleep_cfgs_e
 {
-    IRQ_HEADER_ERROR_CODE                   = 0x01,
-    IRQ_SYNCWORD_ERROR_CODE                 = 0x02,
-    IRQ_CRC_ERROR_CODE                      = 0x04,
-}IrqErrorCode_t;
+    SX126X_SLEEP_CFG_COLD_START = ( 0 << 2 ),
+    SX126X_SLEEP_CFG_WARM_START = ( 1 << 2 ),
+} sx126x_sleep_cfgs_t;
 
-enum IrqPblSyncHeaderCode_t
+/**
+ * @brief SX126X standby modes enumeration definition
+ * SX126X 待机模式枚举定义
+ */
+typedef enum sx126x_standby_cfgs_e
 {
-    IRQ_PBL_DETECT_CODE                     = 0x01,
-    IRQ_SYNCWORD_VALID_CODE                 = 0x02,
-    IRQ_HEADER_VALID_CODE                   = 0x04,
+    SX126X_STANDBY_CFG_RC   = 0x00,
+    SX126X_STANDBY_CFG_XOSC = 0x01,
+} sx126x_standby_cfgs_t;
+
+typedef uint8_t sx126x_standby_cfg_t;
+
+/**
+ * @brief SX126X power regulator modes enumeration definition
+ * SX126X 功率调节器模式枚举定义
+ */
+typedef enum sx126x_reg_mods_e
+{
+    SX126X_REG_MODE_LDO  = 0x00,  // default
+    SX126X_REG_MODE_DCDC = 0x01,
+} sx126x_reg_mod_t;
+
+/**
+ * @brief SX126X power amplifier configuration parameters structure definition
+ * SX126X功放配置参数结构定义
+ */
+typedef struct sx126x_pa_cfg_params_s
+{
+    uint8_t pa_duty_cycle;
+    uint8_t hp_max;
+    uint8_t device_sel;
+    uint8_t pa_lut;
+} sx126x_pa_cfg_params_t;
+
+/**
+ * @brief SX126X fallback modes enumeration definition
+ * SX126X 回退模式枚举定义
+ */
+typedef enum sx126x_fallback_modes_e
+{
+    SX126X_FALLBACK_STDBY_RC   = 0x20,
+    SX126X_FALLBACK_STDBY_XOSC = 0x30,
+    SX126X_FALLBACK_FS         = 0x40,
+} sx126x_fallback_modes_t;
+
+/**
+ * @brief SX126X interrupt masks enumeration definition
+ * SX126X中断屏蔽枚举定义
+ */
+enum sx126x_irq_masks_e
+{
+    SX126X_IRQ_NONE              = ( 0 << 0 ),
+    SX126X_IRQ_TX_DONE           = ( 1 << 0 ),
+    SX126X_IRQ_RX_DONE           = ( 1 << 1 ),
+    SX126X_IRQ_PREAMBLE_DETECTED = ( 1 << 2 ),
+    SX126X_IRQ_SYNC_WORD_VALID   = ( 1 << 3 ),
+    SX126X_IRQ_HEADER_VALID      = ( 1 << 4 ),
+    SX126X_IRQ_HEADER_ERROR      = ( 1 << 5 ),
+    SX126X_IRQ_CRC_ERROR         = ( 1 << 6 ),
+    SX126X_IRQ_CAD_DONE          = ( 1 << 7 ),
+    SX126X_IRQ_CAD_DETECTED      = ( 1 << 8 ),
+    SX126X_IRQ_TIMEOUT           = ( 1 << 9 ),
+    SX126X_IRQ_ALL               = SX126X_IRQ_TX_DONE | SX126X_IRQ_RX_DONE | SX126X_IRQ_PREAMBLE_DETECTED |
+                     SX126X_IRQ_SYNC_WORD_VALID | SX126X_IRQ_HEADER_VALID | SX126X_IRQ_HEADER_ERROR |
+                     SX126X_IRQ_CRC_ERROR | SX126X_IRQ_CAD_DONE | SX126X_IRQ_CAD_DETECTED | SX126X_IRQ_TIMEOUT,
 };
 
-/*!
- * \brief Represents the operating mode the radio is actually running
+typedef uint16_t sx126x_irq_mask_t;
+
+/**
+ * @brief Calibration settings
+ * 校准设置
  */
-typedef enum
+enum sx126x_cal_mask_e
 {
-    MODE_SLEEP                              = 0x00,         //! The radio is in sleep mode
-    MODE_STDBY_RC,                                          //! The radio is in standby mode with RC oscillator
-    MODE_STDBY_XOSC,                                        //! The radio is in standby mode with XOSC oscillator
-    MODE_FS,                                                //! The radio is in frequency synthesis mode
-    MODE_TX,                                                //! The radio is in transmit mode
-    MODE_RX,                                                //! The radio is in receive mode
-    MODE_RX_DC,                                             //! The radio is in receive duty cycle mode
-    MODE_CAD                                                //! The radio is in channel activity detection mode
-}RadioOperatingModes_t;
+    SX126X_CAL_RC64K      = ( 1 << 0 ),
+    SX126X_CAL_RC13M      = ( 1 << 1 ),
+    SX126X_CAL_PLL        = ( 1 << 2 ),
+    SX126X_CAL_ADC_PULSE  = ( 1 << 3 ),
+    SX126X_CAL_ADC_BULK_N = ( 1 << 4 ),
+    SX126X_CAL_ADC_BULK_P = ( 1 << 5 ),
+    SX126X_CAL_IMAGE      = ( 1 << 6 ),
+    SX126X_CAL_ALL        = SX126X_CAL_RC64K | SX126X_CAL_RC13M | SX126X_CAL_PLL | SX126X_CAL_ADC_PULSE |
+                     SX126X_CAL_ADC_BULK_N | SX126X_CAL_ADC_BULK_P | SX126X_CAL_IMAGE,
+};
 
-/*!
- * \brief Declares the oscillator in use while in standby mode
- *
- * Using the STDBY_RC standby mode allow to reduce the energy consumption
- * STDBY_XOSC should be used for time critical applications
+typedef uint8_t sx126x_cal_mask_t;
+
+/**
+ * @brief SX126X TCXO control voltages enumeration definition
+ * SX126X TCXO 控制电压枚举定义
  */
-typedef enum
+typedef enum sx126x_tcxo_ctrl_voltages_e
 {
-    STDBY_RC                                = 0x00,
-    STDBY_XOSC                              = 0x01,
-}RadioStandbyModes_t;
+    SX126X_TCXO_CTRL_1_6V = 0x00,
+    SX126X_TCXO_CTRL_1_7V = 0x01,
+    SX126X_TCXO_CTRL_1_8V = 0x02,
+    SX126X_TCXO_CTRL_2_2V = 0x03,
+    SX126X_TCXO_CTRL_2_4V = 0x04,
+    SX126X_TCXO_CTRL_2_7V = 0x05,
+    SX126X_TCXO_CTRL_3_0V = 0x06,
+    SX126X_TCXO_CTRL_3_3V = 0x07,
+} sx126x_tcxo_ctrl_voltages_t;
 
-/*!
- * \brief Declares the power regulation used to power the device
- *
- * This command allows the user to specify if DC-DC or LDO is used for power regulation.
- * Using only LDO implies that the Rx or Tx current is doubled
+/**
+ * @brief SX126X packet types enumeration definition
+ * SX126X 数据包类型枚举定义
  */
-typedef enum
+typedef enum sx126x_pkt_types_e
 {
-    USE_LDO                                 = 0x00, // default
-    USE_DCDC                                = 0x01,
-}RadioRegulatorMode_t;
+    SX126X_PKT_TYPE_GFSK = 0x00,
+    SX126X_PKT_TYPE_LORA = 0x01,
+} sx126x_pkt_type_t;
 
-/*!
- * \brief Represents the possible packet type (i.e. modem) used
+/**
+ * @brief SX126X power amplifier ramp-up timings enumeration definition
+ * SX126X 功率放大器斜升时序枚举定义
  */
-typedef enum
+typedef enum sx126x_ramp_time_e
 {
-    PACKET_TYPE_GFSK                        = 0x00,
-    PACKET_TYPE_LORA                        = 0x01,
-    PACKET_TYPE_NONE                        = 0x0F,
-}RadioPacketTypes_t;
+    SX126X_RAMP_10_US   = 0x00,
+    SX126X_RAMP_20_US   = 0x01,
+    SX126X_RAMP_40_US   = 0x02,
+    SX126X_RAMP_80_US   = 0x03,
+    SX126X_RAMP_200_US  = 0x04,
+    SX126X_RAMP_800_US  = 0x05,
+    SX126X_RAMP_1700_US = 0x06,
+    SX126X_RAMP_3400_US = 0x07,
+} sx126x_ramp_time_t;
 
-/*!
- * \brief Represents the ramping time for power amplifier
+/**
+ * @brief SX126X GFSK modulation shaping enumeration definition
+ * SX126X GFSK 调制整形枚举定义
  */
-typedef enum
+typedef enum sx126x_gfsk_pulse_shape_e
 {
-    RADIO_RAMP_10_US                        = 0x00,
-    RADIO_RAMP_20_US                        = 0x01,
-    RADIO_RAMP_40_US                        = 0x02,
-    RADIO_RAMP_80_US                        = 0x03,
-    RADIO_RAMP_200_US                       = 0x04,
-    RADIO_RAMP_800_US                       = 0x05,
-    RADIO_RAMP_1700_US                      = 0x06,
-    RADIO_RAMP_3400_US                      = 0x07,
-}RadioRampTimes_t;
+    SX126X_GFSK_PULSE_SHAPE_OFF   = 0x00,
+    SX126X_GFSK_PULSE_SHAPE_BT_03 = 0x08,
+    SX126X_GFSK_PULSE_SHAPE_BT_05 = 0x09,
+    SX126X_GFSK_PULSE_SHAPE_BT_07 = 0x0A,
+    SX126X_GFSK_PULSE_SHAPE_BT_1  = 0x0B,
+} sx126x_gfsk_pulse_shape_t;
 
-/*!
- * \brief Represents the number of symbols to be used for channel activity detection operation
+/**
+ * @brief SX126X GFSK Rx bandwidth enumeration definition
+ * SX126X GFSK Rx 带宽枚举定义
  */
-typedef enum
+typedef enum sx126x_gfsk_bw_e
 {
-    LORA_CAD_01_SYMBOL                      = 0x00,
-    LORA_CAD_02_SYMBOL                      = 0x01,
-    LORA_CAD_04_SYMBOL                      = 0x02,
-    LORA_CAD_08_SYMBOL                      = 0x03,
-    LORA_CAD_16_SYMBOL                      = 0x04,
-}RadioLoRaCadSymbols_t;
+    SX126X_GFSK_BW_4800   = 0x1F,
+    SX126X_GFSK_BW_5800   = 0x17,
+    SX126X_GFSK_BW_7300   = 0x0F,
+    SX126X_GFSK_BW_9700   = 0x1E,
+    SX126X_GFSK_BW_11700  = 0x16,
+    SX126X_GFSK_BW_14600  = 0x0E,
+    SX126X_GFSK_BW_19500  = 0x1D,
+    SX126X_GFSK_BW_23400  = 0x15,
+    SX126X_GFSK_BW_29300  = 0x0D,
+    SX126X_GFSK_BW_39000  = 0x1C,
+    SX126X_GFSK_BW_46900  = 0x14,
+    SX126X_GFSK_BW_58600  = 0x0C,
+    SX126X_GFSK_BW_78200  = 0x1B,
+    SX126X_GFSK_BW_93800  = 0x13,
+    SX126X_GFSK_BW_117300 = 0x0B,
+    SX126X_GFSK_BW_156200 = 0x1A,
+    SX126X_GFSK_BW_187200 = 0x12,
+    SX126X_GFSK_BW_234300 = 0x0A,
+    SX126X_GFSK_BW_312000 = 0x19,
+    SX126X_GFSK_BW_373600 = 0x11,
+    SX126X_GFSK_BW_467000 = 0x09,
+} sx126x_gfsk_bw_t;
 
-/*!
- * \brief Represents the Channel Activity Detection actions after the CAD operation is finished
+/**
+ * @brief SX126X GFSK modulation parameters structure definition
+ * SX126X GFSK调制参数结构定义
  */
-typedef enum
+typedef struct sx126x_mod_params_gfsk_s
 {
-    LORA_CAD_ONLY                           = 0x00,
-    LORA_CAD_RX                             = 0x01,
-    LORA_CAD_LBT                            = 0x10,
-}RadioCadExitModes_t;
+    uint32_t                  br_in_bps;
+    uint32_t                  fdev_in_hz;
+    sx126x_gfsk_pulse_shape_t pulse_shape;
+    sx126x_gfsk_bw_t          bw_dsb_param;
+} sx126x_mod_params_gfsk_t;
 
-/*!
- * \brief Represents the modulation shaping parameter
+/**
+ * @brief SX126X LoRa spreading factor enumeration definition
+ * SX126X LoRa扩频因子枚举定义
  */
-typedef enum
+typedef enum sx126x_lora_sf_e
 {
-    MOD_SHAPING_OFF                         = 0x00,
-    MOD_SHAPING_G_BT_03                     = 0x08,
-    MOD_SHAPING_G_BT_05                     = 0x09,
-    MOD_SHAPING_G_BT_07                     = 0x0A,
-    MOD_SHAPING_G_BT_1                      = 0x0B,
-}RadioModShapings_t;
+    SX126X_LORA_SF5  = 0x05,
+    SX126X_LORA_SF6  = 0x06,
+    SX126X_LORA_SF7  = 0x07,
+    SX126X_LORA_SF8  = 0x08,
+    SX126X_LORA_SF9  = 0x09,
+    SX126X_LORA_SF10 = 0x0A,
+    SX126X_LORA_SF11 = 0x0B,
+    SX126X_LORA_SF12 = 0x0C,
+} sx126x_lora_sf_t;
 
-/*!
- * \brief Represents the modulation shaping parameter
+/**
+ * @brief SX126X LoRa bandwidth enumeration definition
+ * SX126X LoRa带宽枚举定义
  */
-typedef enum
+typedef enum sx126x_lora_bw_e
 {
-    RX_BW_4800                              = 0x1F,
-    RX_BW_5800                              = 0x17,
-    RX_BW_7300                              = 0x0F,
-    RX_BW_9700                              = 0x1E,
-    RX_BW_11700                             = 0x16,
-    RX_BW_14600                             = 0x0E,
-    RX_BW_19500                             = 0x1D,
-    RX_BW_23400                             = 0x15,
-    RX_BW_29300                             = 0x0D,
-    RX_BW_39000                             = 0x1C,
-    RX_BW_46900                             = 0x14,
-    RX_BW_58600                             = 0x0C,
-    RX_BW_78200                             = 0x1B,
-    RX_BW_93800                             = 0x13,
-    RX_BW_117300                            = 0x0B,
-    RX_BW_156200                            = 0x1A,
-    RX_BW_187200                            = 0x12,
-    RX_BW_234300                            = 0x0A,
-    RX_BW_312000                            = 0x19,
-    RX_BW_373600                            = 0x11,
-    RX_BW_467000                            = 0x09,
-}RadioRxBandwidth_t;
+    SX126X_LORA_BW_500 = 6,
+    SX126X_LORA_BW_250 = 5,
+    SX126X_LORA_BW_125 = 4,
+    SX126X_LORA_BW_062 = 3,
+    SX126X_LORA_BW_041 = 10,
+    SX126X_LORA_BW_031 = 2,
+    SX126X_LORA_BW_020 = 9,
+    SX126X_LORA_BW_015 = 1,
+    SX126X_LORA_BW_010 = 8,
+    SX126X_LORA_BW_007 = 0,
+} sx126x_lora_bw_t;
 
-/*!
- * \brief Represents the possible spreading factor values in LoRa packet types
+/**
+ * @brief SX126X LoRa coding rate enumeration definition
+ * SX126X LoRa编码率枚举定义
  */
-typedef enum
+typedef enum sx126x_lora_cr_e
 {
-    LORA_SF5                                = 0x05,
-    LORA_SF6                                = 0x06,
-    LORA_SF7                                = 0x07,
-    LORA_SF8                                = 0x08,
-    LORA_SF9                                = 0x09,
-    LORA_SF10                               = 0x0A,
-    LORA_SF11                               = 0x0B,
-    LORA_SF12                               = 0x0C,
-}RadioLoRaSpreadingFactors_t;
+    SX126X_LORA_CR_4_5 = 0x01,
+    SX126X_LORA_CR_4_6 = 0x02,
+    SX126X_LORA_CR_4_7 = 0x03,
+    SX126X_LORA_CR_4_8 = 0x04,
+} sx126x_lora_cr_t;
 
-/*!
- * \brief Represents the bandwidth values for LoRa packet type
+/**
+ * @brief SX126X LoRa modulation parameters structure definition
+ * SX126X LoRa调制参数结构定义
  */
-typedef enum
+typedef struct sx126x_mod_params_lora_s
 {
-    LORA_BW_500                             = 6,
-    LORA_BW_250                             = 5,
-    LORA_BW_125                             = 4,
-    LORA_BW_062                             = 3,
-    LORA_BW_041                             = 10,
-    LORA_BW_031                             = 2,
-    LORA_BW_020                             = 9,
-    LORA_BW_015                             = 1,
-    LORA_BW_010                             = 8,
-    LORA_BW_007                             = 0,
-}RadioLoRaBandwidths_t;
+    sx126x_lora_sf_t sf;    //!< LoRa Spreading Factor
+    sx126x_lora_bw_t bw;    //!< LoRa Bandwidth
+    sx126x_lora_cr_t cr;    //!< LoRa Coding Rate
+    uint8_t          ldro;  //!< Low DataRate Optimization configuration
+} sx126x_mod_params_lora_t;
 
-/*!
- * \brief Represents the coding rate values for LoRa packet type
+/**
+ * @brief SX126X GFSK preamble length Rx detection size enumeration definition
+ * SX126X GFSK 前导长度 Rx 检测大小枚举定义
  */
-typedef enum
+typedef enum sx126x_gfsk_preamble_detector_e
 {
-    LORA_CR_4_5                             = 0x01,
-    LORA_CR_4_6                             = 0x02,
-    LORA_CR_4_7                             = 0x03,
-    LORA_CR_4_8                             = 0x04,
-}RadioLoRaCodingRates_t;
+    SX126X_GFSK_PREAMBLE_DETECTOR_OFF        = 0x00,
+    SX126X_GFSK_PREAMBLE_DETECTOR_MIN_8BITS  = 0x04,
+    SX126X_GFSK_PREAMBLE_DETECTOR_MIN_16BITS = 0x05,
+    SX126X_GFSK_PREAMBLE_DETECTOR_MIN_24BITS = 0x06,
+    SX126X_GFSK_PREAMBLE_DETECTOR_MIN_32BITS = 0x07,
+} sx126x_gfsk_preamble_detector_t;
 
-/*!
- * \brief Represents the preamble length used to detect the packet on Rx side
+/**
+ * @brief SX126X GFSK address filtering configuration enumeration definition
+ * SX126X GFSK地址过滤配置枚举定义
  */
-typedef enum
+typedef enum sx126x_gfsk_address_filtering_e
 {
-    RADIO_PREAMBLE_DETECTOR_OFF             = 0x00,         //!< Preamble detection length off
-    RADIO_PREAMBLE_DETECTOR_08_BITS         = 0x04,         //!< Preamble detection length 8 bits
-    RADIO_PREAMBLE_DETECTOR_16_BITS         = 0x05,         //!< Preamble detection length 16 bits
-    RADIO_PREAMBLE_DETECTOR_24_BITS         = 0x06,         //!< Preamble detection length 24 bits
-    RADIO_PREAMBLE_DETECTOR_32_BITS         = 0x07,         //!< Preamble detection length 32 bit
-}RadioPreambleDetection_t;
+    SX126X_GFSK_ADDRESS_FILTERING_DISABLE                      = 0x00,
+    SX126X_GFSK_ADDRESS_FILTERING_NODE_ADDRESS                 = 0x01,
+    SX126X_GFSK_ADDRESS_FILTERING_NODE_AND_BROADCAST_ADDRESSES = 0x02,
+} sx126x_gfsk_address_filtering_t;
 
-/*!
- * \brief Represents the possible combinations of SyncWord correlators activated
+/**
+ * @brief SX126X GFSK packet length enumeration definition
+ * SX126X GFSK 包长度枚举定义
  */
-typedef enum
+typedef enum sx126x_gfsk_pkt_len_modes_e
 {
-    RADIO_ADDRESSCOMP_FILT_OFF              = 0x00,         //!< No correlator turned on, i.e. do not search for SyncWord
-    RADIO_ADDRESSCOMP_FILT_NODE             = 0x01,
-    RADIO_ADDRESSCOMP_FILT_NODE_BROAD       = 0x02,
-}RadioAddressComp_t;
+    SX126X_GFSK_PKT_FIX_LEN = 0x00,  //!< The packet length is known on both sides, no header included
+    SX126X_GFSK_PKT_VAR_LEN = 0x01,  //!< The packet length is variable, header included
+} sx126x_gfsk_pkt_len_modes_t;
 
-/*!
- *  \brief Radio GFSK packet length mode
+/**
+ * @brief SX126X GFSK CRC type enumeration definition
+ * SX126X GFSK CRC 类型枚举定义
  */
-typedef enum
+typedef enum sx16x_gfsk_crc_types_e
 {
-    RADIO_PACKET_FIXED_LENGTH               = 0x00,         //!< The packet is known on both sides, no header included in the packet
-    RADIO_PACKET_VARIABLE_LENGTH            = 0x01,         //!< The packet is on variable size, header included
-}RadioPacketLengthModes_t;
+    SX126X_GFSK_CRC_OFF         = 0x01,
+    SX126X_GFSK_CRC_1_BYTE      = 0x00,
+    SX126X_GFSK_CRC_2_BYTES     = 0x02,
+    SX126X_GFSK_CRC_1_BYTE_INV  = 0x04,
+    SX126X_GFSK_CRC_2_BYTES_INV = 0x06,
+} sx126x_gfsk_crc_types_t;
 
-/*!
- * \brief Represents the CRC length
+/**
+ * @brief SX126X GFSK whitening control enumeration definition
+ * SX126X GFSK whitening control enumeration definition
  */
-typedef enum
+typedef enum sx126x_gfsk_dc_free_e
 {
-    RADIO_CRC_OFF                           = 0x01,         //!< No CRC in use
-    RADIO_CRC_1_BYTES                       = 0x00,
-    RADIO_CRC_2_BYTES                       = 0x02,
-    RADIO_CRC_1_BYTES_INV                   = 0x04,
-    RADIO_CRC_2_BYTES_INV                   = 0x06,
-    RADIO_CRC_2_BYTES_IBM                   = 0xF1,
-    RADIO_CRC_2_BYTES_CCIT                  = 0xF2,
-}RadioCrcTypes_t;
+    SX126X_GFSK_DC_FREE_OFF       = 0x00,
+    SX126X_GFSK_DC_FREE_WHITENING = 0x01,
+} sx126x_gfsk_dc_free_t;
 
-/*!
- * \brief Radio whitening mode activated or deactivated
+/**
+ * @brief SX126X LoRa packet length enumeration definition
+ * SX126X LoRa 数据包长度枚举定义
  */
-typedef enum
+typedef enum sx126x_lora_pkt_len_modes_e
 {
-    RADIO_DC_FREE_OFF                       = 0x00,
-    RADIO_DC_FREEWHITENING                  = 0x01,
-}RadioDcFree_t;
+    SX126X_LORA_PKT_EXPLICIT = 0x00,  //!< Header included in the packet
+    SX126X_LORA_PKT_IMPLICIT = 0x01,  //!< Header not included in the packet
+} sx126x_lora_pkt_len_modes_t;
 
-/*!
- * \brief Holds the Radio lengths mode for the LoRa packet type
+/**
+ * @brief SX126X LoRa packet parameters structure definition
+ * SX126X LoRa数据包参数结构定义
  */
-typedef enum
+typedef struct sx126x_pkt_params_lora_s
 {
-    LORA_PACKET_VARIABLE_LENGTH             = 0x00,         //!< The packet is on variable size, header included
-    LORA_PACKET_FIXED_LENGTH                = 0x01,         //!< The packet is known on both sides, no header included in the packet
-    LORA_PACKET_EXPLICIT                    = LORA_PACKET_VARIABLE_LENGTH,
-    LORA_PACKET_IMPLICIT                    = LORA_PACKET_FIXED_LENGTH,
-}RadioLoRaPacketLengthsMode_t;
+    uint16_t                    preamble_len_in_symb;  //!< Preamble length in symbols
+    sx126x_lora_pkt_len_modes_t header_type;           //!< Header type
+    uint8_t                     pld_len_in_bytes;      //!< Payload length in bytes
+    bool                        crc_is_on;             //!< CRC activation
+    bool                        invert_iq_is_on;       //!< IQ polarity setup
+} sx126x_pkt_params_lora_t;
 
-/*!
- * \brief Represents the CRC mode for LoRa packet type
+/**
+ * @brief SX126X GFSK packet parameters structure definition
+ * SX126X GFSK 数据包参数结构定义
  */
-typedef enum
+typedef struct sx126x_pkt_params_gfsk_s
 {
-    LORA_CRC_ON                             = 0x01,         //!< CRC activated
-    LORA_CRC_OFF                            = 0x00,         //!< CRC not used
-}RadioLoRaCrcModes_t;
+    uint16_t                        preamble_len_in_bits;   //!< Preamble length in bits
+    sx126x_gfsk_preamble_detector_t preamble_detector;      //!< Preamble detection length
+    uint8_t                         sync_word_len_in_bits;  //!< Sync word length in bits
+    sx126x_gfsk_address_filtering_t address_filtering;      //!< Address filtering configuration
+    sx126x_gfsk_pkt_len_modes_t     header_type;            //!< Header type
+    uint8_t                         pld_len_in_bytes;       //!< Payload length in bytes
+    sx126x_gfsk_crc_types_t         crc_type;               //!< CRC type configuration
+    sx126x_gfsk_dc_free_t           dc_free;                //!< Whitening configuration
+} sx126x_pkt_params_gfsk_t;
 
-/*!
- * \brief Represents the IQ mode for LoRa packet type
+/**
+ * @brief SX126X LoRa CAD number of symbols enumeration definition
+ * SX126X LoRa CAD 符号数枚举定义
+ *
+ * @note Represents the number of symbols to be used for a CAD operation
+ * 表示用于 CAD 操作的符号数
  */
-typedef enum
+typedef enum sx126x_cad_symbs_e
 {
-    LORA_IQ_NORMAL                          = 0x00,
-    LORA_IQ_INVERTED                        = 0x01,
-}RadioLoRaIQModes_t;
+    SX126X_CAD_01_SYMB = 0x00,
+    SX126X_CAD_02_SYMB = 0x01,
+    SX126X_CAD_04_SYMB = 0x02,
+    SX126X_CAD_08_SYMB = 0x03,
+    SX126X_CAD_16_SYMB = 0x04,
+} sx126x_cad_symbs_t;
 
-/*!
- * \brief Represents the voltage used to control the TCXO on/off from DIO3
+/**
+ * @brief SX126X LoRa CAD exit modes enumeration definition
+ * SX126X LoRa CAD 退出模式枚举定义
+ *
+ * @note Represents the action to be performed after a CAD is done
+ * 表示完成 CAD 后要执行的操作
  */
-typedef enum
+typedef enum sx126x_cad_exit_modes_e
 {
-    TCXO_CTRL_1_6V                          = 0x00,
-    TCXO_CTRL_1_7V                          = 0x01,
-    TCXO_CTRL_1_8V                          = 0x02,
-    TCXO_CTRL_2_2V                          = 0x03,
-    TCXO_CTRL_2_4V                          = 0x04,
-    TCXO_CTRL_2_7V                          = 0x05,
-    TCXO_CTRL_3_0V                          = 0x06,
-    TCXO_CTRL_3_3V                          = 0x07,
-}RadioTcxoCtrlVoltage_t;
+    SX126X_CAD_ONLY = 0x00,
+    SX126X_CAD_RX   = 0x01,
+    SX126X_CAD_LBT  = 0x10,
+} sx126x_cad_exit_modes_t;
 
-/*!
- * \brief Represents the interruption masks available for the radio
- *
- * \remark Note that not all these interruptions are available for all packet types
+/**
+ * @brief SX126X CAD parameters structure definition
+ * SX126X CAD参数结构定义
  */
-typedef enum
+typedef struct sx126x_cad_param_s
 {
-    IRQ_RADIO_NONE                          = 0x0000,
-    IRQ_TX_DONE                             = 0x0001,
-    IRQ_RX_DONE                             = 0x0002,
-    IRQ_PREAMBLE_DETECTED                   = 0x0004,
-    IRQ_SYNCWORD_VALID                      = 0x0008,
-    IRQ_HEADER_VALID                        = 0x0010,
-    IRQ_HEADER_ERROR                        = 0x0020,
-    IRQ_CRC_ERROR                           = 0x0040,
-    IRQ_CAD_DONE                            = 0x0080,
-    IRQ_CAD_ACTIVITY_DETECTED               = 0x0100,
-    IRQ_RX_TX_TIMEOUT                       = 0x0200,
-    IRQ_RADIO_ALL                           = 0xFFFF,
-}RadioIrqMasks_t;
+    sx126x_cad_symbs_t      cad_symb_nb;      //!< CAD number of symbols
+    uint8_t                 cad_detect_peak;  //!< CAD peak detection
+    uint8_t                 cad_detect_min;   //!< CAD minimum detection
+    sx126x_cad_exit_modes_t cad_exit_mode;    //!< CAD exit mode
+    uint32_t                cad_timeout;      //!< CAD timeout value
+} sx126x_cad_params_t;
 
-/*!
- * \brief Represents all possible opcode understood by the radio
+/**
+ * @brief SX126X chip mode enumeration definition
+ * SX126X芯片模式枚举定义
  */
-typedef enum RadioCommands_e
+typedef enum sx126x_chip_modes_e
 {
-    RADIO_GET_STATUS                        = 0xC0,
-    RADIO_WRITE_REGISTER                    = 0x0D,
-    RADIO_READ_REGISTER                     = 0x1D,
-    RADIO_WRITE_BUFFER                      = 0x0E,
-    RADIO_READ_BUFFER                       = 0x1E,
-    RADIO_SET_SLEEP                         = 0x84,
-    RADIO_SET_STANDBY                       = 0x80,
-    RADIO_SET_FS                            = 0xC1,
-    RADIO_SET_TX                            = 0x83,
-    RADIO_SET_RX                            = 0x82,
-    RADIO_SET_RXDUTYCYCLE                   = 0x94,
-    RADIO_SET_CAD                           = 0xC5,
-    RADIO_SET_TXCONTINUOUSWAVE              = 0xD1,
-    RADIO_SET_TXCONTINUOUSPREAMBLE          = 0xD2,
-    RADIO_SET_PACKETTYPE                    = 0x8A,
-    RADIO_GET_PACKETTYPE                    = 0x11,
-    RADIO_SET_RFFREQUENCY                   = 0x86,
-    RADIO_SET_TXPARAMS                      = 0x8E,
-    RADIO_SET_PACONFIG                      = 0x95,
-    RADIO_SET_CADPARAMS                     = 0x88,
-    RADIO_SET_BUFFERBASEADDRESS             = 0x8F,
-    RADIO_SET_MODULATIONPARAMS              = 0x8B,
-    RADIO_SET_PACKETPARAMS                  = 0x8C,
-    RADIO_GET_RXBUFFERSTATUS                = 0x13,
-    RADIO_GET_PACKETSTATUS                  = 0x14,
-    RADIO_GET_RSSIINST                      = 0x15,
-    RADIO_GET_STATS                         = 0x10,
-    RADIO_RESET_STATS                       = 0x00,
-    RADIO_CFG_DIOIRQ                        = 0x08,
-    RADIO_GET_IRQSTATUS                     = 0x12,
-    RADIO_CLR_IRQSTATUS                     = 0x02,
-    RADIO_CALIBRATE                         = 0x89,
-    RADIO_CALIBRATEIMAGE                    = 0x98,
-    RADIO_SET_REGULATORMODE                 = 0x96,
-    RADIO_GET_ERROR                         = 0x17,
-    RADIO_CLR_ERROR                         = 0x07,
-    RADIO_SET_TCXOMODE                      = 0x97,
-    RADIO_SET_TXFALLBACKMODE                = 0x93,
-    RADIO_SET_RFSWITCHMODE                  = 0x9D,
-    RADIO_SET_STOPRXTIMERONPREAMBLE         = 0x9F,
-    RADIO_SET_LORASYMBTIMEOUT               = 0xA0,
-}RadioCommands_t;
+    SX126X_CHIP_MODE_UNUSED    = 0,
+    SX126X_CHIP_MODE_RFU       = 1,
+    SX126X_CHIP_MODE_STBY_RC   = 2,
+    SX126X_CHIP_MODE_STBY_XOSC = 3,
+    SX126X_CHIP_MODE_FS        = 4,
+    SX126X_CHIP_MODE_RX        = 5,
+    SX126X_CHIP_MODE_TX        = 6,
+} sx126x_chip_modes_t;
 
-/*!
- * \brief The type describing the modulation parameters for every packet types
+/**
+ * @brief SX126X command status enumeration definition
+ * SX126X 命令状态枚举定义
  */
-typedef struct
+typedef enum sx126x_cmd_status_e
 {
-    RadioPacketTypes_t                   PacketType;        //!< Packet to which the modulation parameters are referring to.
-    struct
-    {
-        struct
-        {
-            uint32_t                     BitRate;
-            uint32_t                     Fdev;
-            RadioModShapings_t           ModulationShaping;
-            uint8_t                      Bandwidth;
-        }Gfsk;
-        struct
-        {
-            RadioLoRaSpreadingFactors_t  SpreadingFactor;   //!< Spreading Factor for the LoRa modulation
-            RadioLoRaBandwidths_t        Bandwidth;         //!< Bandwidth for the LoRa modulation
-            RadioLoRaCodingRates_t       CodingRate;        //!< Coding rate for the LoRa modulation
-            uint8_t                      LowDatarateOptimize; //!< Indicates if the modem uses the low datarate optimization
-        }LoRa;
-    }Params;                                                //!< Holds the modulation parameters structure
-}ModulationParams_t;
+    SX126X_CMD_STATUS_RESERVED          = 0,
+    SX126X_CMD_STATUS_RFU               = 1,
+    SX126X_CMD_STATUS_DATA_AVAILABLE    = 2,
+    SX126X_CMD_STATUS_CMD_TIMEOUT       = 3,
+    SX126X_CMD_STATUS_CMD_PROCESS_ERROR = 4,
+    SX126X_CMD_STATUS_CMD_EXEC_FAILURE  = 5,
+    SX126X_CMD_STATUS_CMD_TX_DONE       = 6,
+} sx126x_cmd_status_t;
 
-/*!
- * \brief The type describing the packet parameters for every packet types
+/**
+ * @brief SX126X chip status structure definition
+ * SX126X芯片状态结构定义
  */
-typedef struct
+typedef struct sx126x_chip_status_s
 {
-    RadioPacketTypes_t                    PacketType;        //!< Packet to which the packet parameters are referring to.
-    struct
-    {
-        /*!
-         * \brief Holds the GFSK packet parameters
-         */
-        struct
-        {
-            uint16_t                     PreambleLength;    //!< The preamble Tx length for GFSK packet type in bit
-            RadioPreambleDetection_t     PreambleMinDetect; //!< The preamble Rx length minimal for GFSK packet type
-            uint8_t                      SyncWordLength;    //!< The synchronization word length for GFSK packet type
-            RadioAddressComp_t           AddrComp;          //!< Activated SyncWord correlators
-            RadioPacketLengthModes_t     HeaderType;        //!< If the header is explicit, it will be transmitted in the GFSK packet. If the header is implicit, it will not be transmitted
-            uint8_t                      PayloadLength;     //!< Size of the payload in the GFSK packet
-            RadioCrcTypes_t              CrcLength;         //!< Size of the CRC block in the GFSK packet
-            RadioDcFree_t                DcFree;
-        }Gfsk;
-        /*!
-         * \brief Holds the LoRa packet parameters
-         */
-        struct
-        {
-            uint16_t                     PreambleLength;    //!< The preamble length is the number of LoRa symbols in the preamble
-            RadioLoRaPacketLengthsMode_t HeaderType;        //!< If the header is explicit, it will be transmitted in the LoRa packet. If the header is implicit, it will not be transmitted
-            uint8_t                      PayloadLength;     //!< Size of the payload in the LoRa packet
-            RadioLoRaCrcModes_t          CrcMode;           //!< Size of CRC block in LoRa packet
-            RadioLoRaIQModes_t           InvertIQ;          //!< Allows to swap IQ for LoRa packet
-        }LoRa;
-    }Params;                                                //!< Holds the packet parameters structure
-}PacketParams_t;
+    sx126x_cmd_status_t cmd_status;  //!< Previous command status
+    sx126x_chip_modes_t chip_mode;   //!< Current chip mode
+} sx126x_chip_status_t;
 
-/*!
- * \brief Represents the packet status for every packet type
+/**
+ * @brief SX126X RX buffer status structure definition
+ * SX126X RX 缓冲区状态结构体定义
  */
-typedef struct
+typedef struct sx126x_rx_buffer_status_s
 {
-    RadioPacketTypes_t                    packetType;      //!< Packet to which the packet status are referring to.
-    struct
-    {
-        struct
-        {
-            uint8_t RxStatus;
-            int8_t RssiAvg;                                //!< The averaged RSSI
-            int8_t RssiSync;                               //!< The RSSI measured on last packet
-            uint32_t FreqError;
-        }Gfsk;
-        struct
-        {
-            int8_t RssiPkt;                                //!< The RSSI of the last packet
-            int8_t SnrPkt;                                 //!< The SNR of the last packet
-            int8_t SignalRssiPkt;
-            uint32_t FreqError;
-        }LoRa;
-    }Params;
-}PacketStatus_t;
+    uint8_t pld_len_in_bytes;      //!< Number of bytes available in the buffer
+    uint8_t buffer_start_pointer;  //!< Position of the first byte in the buffer
+} sx126x_rx_buffer_status_t;
 
-/*!
- * \brief Represents the Rx internal counters values when GFSK or LoRa packet type is used
- */
-typedef struct
+typedef struct sx126x_rx_status_gfsk_s
 {
-    RadioPacketTypes_t                    packetType;       //!< Packet to which the packet status are referring to.
-    uint16_t PacketReceived;
-    uint16_t CrcOk;
-    uint16_t LengthError;
-}RxCounter_t;
+    bool pkt_sent;
+    bool pkt_received;
+    bool abort_error;
+    bool length_error;
+    bool crc_error;
+    bool adrs_error;
+} sx126x_rx_status_gfsk_t;
 
-/*!
- * \brief Represents a calibration configuration
+/**
+ * @brief SX126X GFSK packet status structure definition
+ * SX126X GFSK 数据包状态结构定义
  */
-typedef union
+typedef struct sx126x_pkt_status_gfsk_s
 {
-    struct
-    {
-        uint8_t RC64KEnable    : 1;                             //!< Calibrate RC64K clock
-        uint8_t RC13MEnable    : 1;                             //!< Calibrate RC13M clock
-        uint8_t PLLEnable      : 1;                             //!< Calibrate PLL
-        uint8_t ADCPulseEnable : 1;                             //!< Calibrate ADC Pulse
-        uint8_t ADCBulkNEnable : 1;                             //!< Calibrate ADC bulkN
-        uint8_t ADCBulkPEnable : 1;                             //!< Calibrate ADC bulkP
-        uint8_t ImgEnable      : 1;
-        uint8_t                : 1;
-    }Fields;
-    uint8_t Value;
-}CalibrationParams_t;
+    sx126x_rx_status_gfsk_t rx_status;
+    int8_t                  rssi_sync;  //!< The RSSI measured on last packet
+    int8_t                  rssi_avg;   //!< The averaged RSSI
+} sx126x_pkt_status_gfsk_t;
 
-/*!
- * \brief Represents a sleep mode configuration
+/**
+ * @brief SX126X LoRa packet status structure definition
+ * SX126X LoRa数据包状态结构定义
  */
-typedef union
+typedef struct sx126x_pkt_status_lora_s
 {
-    struct
-    {
-        uint8_t WakeUpRTC               : 1;                    //!< Get out of sleep mode if wakeup signal received from RTC
-        uint8_t Reset                   : 1;
-        uint8_t WarmStart               : 1;
-        uint8_t Reserved                : 5;
-    }Fields;
-    uint8_t Value;
-}SleepParams_t;
+    int8_t rssi_pkt_in_dbm;         //!< RSSI of the last packet
+    int8_t snr_pkt_in_db;           //!< SNR of the last packet
+    int8_t signal_rssi_pkt_in_dbm;  //!< Estimation of RSSI (after despreading)
+} sx126x_pkt_status_lora_t;
 
-/*!
- * \brief Represents the possible radio system error states
+/**
+ * @brief SX126X GFSK reception statistics structure definition
+ * SX126X GFSK接收统计结构定义
  */
-typedef union
+typedef struct sx126x_stats_gfsk_s
 {
-    struct
-    {
-        uint8_t Rc64kCalib              : 1;                    //!< RC 64kHz oscillator calibration failed
-        uint8_t Rc13mCalib              : 1;                    //!< RC 13MHz oscillator calibration failed
-        uint8_t PllCalib                : 1;                    //!< PLL calibration failed
-        uint8_t AdcCalib                : 1;                    //!< ADC calibration failed
-        uint8_t ImgCalib                : 1;                    //!< Image calibration failed
-        uint8_t XoscStart               : 1;                    //!< XOSC oscillator failed to start
-        uint8_t PllLock                 : 1;                    //!< PLL lock failed
-        uint8_t BuckStart               : 1;                    //!< Buck converter failed to start
-        uint8_t PaRamp                  : 1;                    //!< PA ramp failed
-        uint8_t                         : 7;                    //!< Reserved
-    }Fields;
-    uint16_t Value;
-}RadioError_t;
+    uint16_t nb_pkt_received;
+    uint16_t nb_pkt_crc_error;
+    uint16_t nb_pkt_len_error;
+} sx126x_stats_gfsk_t;
 
-/*!
- * Radio hardware and global parameters
+/**
+ * @brief SX126X LoRa reception statistics structure definition
+ * SX126X LoRa接收统计结构定义
  */
-typedef struct SX126x_s
+typedef struct sx126x_stats_lora_s
 {
-//    Gpio_t        Reset;
-//    Gpio_t        BUSY;
-//    Gpio_t        DIO1;
-//    Gpio_t        DIO2;
-//    Gpio_t        DIO3;
-//    Spi_t         Spi;
-    PacketParams_t PacketParams;
-    PacketStatus_t PacketStatus;
-    ModulationParams_t ModulationParams;
-}SX126x_t;
+    uint16_t nb_pkt_received;
+    uint16_t nb_pkt_crc_error;
+    uint16_t nb_pkt_header_error;
+} sx126x_stats_lora_t;
 
-/*!
- * Hardware IO IRQ callback function definition
+/**
+ * @brief SX126X errors enumeration definition
+ * SX126X 错误枚举定义
  */
-typedef void ( DioIrqHandler )( void );
-
-/*!
- * SX126x definitions
- */
-
-/*!
- * \brief Provides the frequency of the chip running on the radio and the frequency step
- *
- * \remark These defines are used for computing the frequency divider to set the RF frequency
- */
-#define XTAL_FREQ                                   ( double )32000000
-#define FREQ_DIV                                    ( double )pow( 2.0, 25.0 )
-#define FREQ_STEP                                   ( double )( XTAL_FREQ / FREQ_DIV )
-
-#define RX_BUFFER_SIZE                              256
-
-/*!
- * \brief The radio callbacks structure
- * Holds function pointers to be called on radio interrupts
- */
-typedef struct
+enum sx126x_errors_e
 {
-    void ( *txDone )( void );                       //!< Pointer to a function run on successful transmission
-    void ( *rxDone )( void );                       //!< Pointer to a function run on successful reception
-    void ( *rxPreambleDetect )( void );             //!< Pointer to a function run on successful Preamble detection
-    void ( *rxSyncWordDone )( void );               //!< Pointer to a function run on successful SyncWord reception
-    void ( *rxHeaderDone )( bool isOk );            //!< Pointer to a function run on successful Header reception
-    void ( *txTimeout )( void );                    //!< Pointer to a function run on transmission timeout
-    void ( *rxTimeout )( void );                    //!< Pointer to a function run on reception timeout
-    void ( *rxError )( IrqErrorCode_t errCode );    //!< Pointer to a function run on reception error
-    void ( *cadDone )( bool cadFlag );              //!< Pointer to a function run on channel activity detected
-}SX126xCallbacks_t;
+    SX126X_ERRORS_RC64K_CALIBRATION = ( 1 << 0 ),
+    SX126X_ERRORS_RC13M_CALIBRATION = ( 1 << 1 ),
+    SX126X_ERRORS_PLL_CALIBRATION   = ( 1 << 2 ),
+    SX126X_ERRORS_ADC_CALIBRATION   = ( 1 << 3 ),
+    SX126X_ERRORS_IMG_CALIBRATION   = ( 1 << 4 ),
+    SX126X_ERRORS_XOSC_START        = ( 1 << 5 ),
+    SX126X_ERRORS_PLL_LOCK          = ( 1 << 6 ),
+    SX126X_ERRORS_PA_RAMP           = ( 1 << 8 ),
+};
 
-/*!
- * ============================================================================
- * Public functions prototypes
- * ============================================================================
- */
- 
-/*!
- * \brief Initializes the radio driver
- */
-void SX126xInit( DioIrqHandler dioIrq );
+typedef uint16_t sx126x_errors_mask_t;
 
-/*!
- * \brief Gets the current Operation Mode of the Radio
+/*
+ * -----------------------------------------------------------------------------
+ * --- PUBLIC FUNCTIONS PROTOTYPES ---------------------------------------------
+ */
+
+//
+// Operational Modes Functions
+//
+
+/**
+ * @brief 将芯片设置为睡眠模式
  *
- * \retval      RadioOperatingModes_t last operating mode
- */
-RadioOperatingModes_t SX126xGetOperatingMode( void );
-
-/*!
- * \brief Wakeup the radio if it is in Sleep mode and check that Busy is low
- */
-void SX126xCheckDeviceReady( void );
-
-/*!
- * \brief Saves the payload to be send in the radio buffer
+ * @param [in]  context 芯片实现上下文
+ * @param [in]  cfg 睡眠模式配置
  *
- * \param [in]  payload       A pointer to the payload
- * \param [in]  size          The size of the payload
+ * @returns 运行状态
  */
-void SX126xSetPayload( uint8_t *payload, uint8_t size );
+sx126x_status_t sx126x_set_sleep( const void* context, const sx126x_sleep_cfgs_t cfg );
 
-/*!
- * \brief Reads the payload received. If the received payload is longer
- * than maxSize, then the method returns 1 and do not set size and payload.
+/**
+ *@brief 将芯片设置为待机模式
  *
- * \param [out] payload       A pointer to a buffer into which the payload will be copied
- * \param [out] size          A pointer to the size of the payload received
- * \param [in]  maxSize       The maximal size allowed to copy into the buffer
- */
-uint8_t SX126xGetPayload( uint8_t *payload, uint8_t *size, uint8_t maxSize );
-
-/*!
- * \brief Sends a payload
+ *@param [in] context 芯片实现上下文。
+ *@param [in] cfg 待机模式配置
  *
- * \param [in]  payload       A pointer to the payload to send
- * \param [in]  size          The size of the payload to send
- * \param [in]  timeout       The timeout for Tx operation
+ *@returns 操作状态
  */
-void SX126xSendPayload( uint8_t *payload, uint8_t size, uint32_t timeout );
+sx126x_status_t sx126x_set_standby( const void* context, const sx126x_standby_cfg_t cfg );
 
-/*!
- * \brief Sets the Sync Word given by index used in GFSK
+/**
+ *@brief 将芯片设置为频率合成模式
  *
- * \param [in]  syncWord      SyncWord bytes ( 8 bytes )
+ *@param [in] context 芯片实现上下文。
  *
- * \retval      status        [0: OK, 1: NOK]
+ *@returns 操作状态
  */
-uint8_t SX126xSetSyncWord( uint8_t *syncWord );
+sx126x_status_t sx126x_set_fs( const void* context );
 
-/*!
- * \brief Sets the Initial value for the LFSR used for the CRC calculation
+/**
+ *@brief 设置芯片为传输模式
  *
- * \param [in]  seed          Initial LFSR value ( 2 bytes )
+ *@remark 使用该命令前，需要使用@ref sx126x_set_pkt_type 配置数据包类型。
  *
- */
-void SX126xSetCrcSeed( uint16_t seed );
-
-/*!
- * \brief Sets the seed used for the CRC calculation
+ *@remark 默认情况下，一旦有数据包发送或收到数据包，芯片自动返回待机 RC 模式
+ *超时前尚未完全传输。这种行为可以通过@ref 改变
+ *sx126x_set_rx_tx_fallback_mode。
  *
- * \param [in]  seed          The seed value
+ *@remark 如果超时参数为 0，则不使用超时。
  *
- */
-void SX126xSetCrcPolynomial( uint16_t polynomial );
-
-/*!
- * \brief Sets the Initial value of the LFSR used for the whitening in GFSK protocols
+ *@param [in] context 芯片实现上下文。
+ *@param [in] timeout_in_ms Tx 操作的超时配置，单位毫秒
  *
- * \param [in]  seed          Initial LFSR value
- */
-void SX126xSetWhiteningSeed( uint16_t seed );
+ *@returns 操作状态 **/
+sx126x_status_t sx126x_set_tx( const void* context, const uint32_t timeout_in_ms );
 
-/*!
- * \brief Gets a 32 bits random value generated by the radio
+/**
+ *@brief 设置芯片为传输模式
  *
- * \remark The radio must be in reception mode before executing this function
+ *@remark 使用该命令前，需要使用@ref sx126x_set_pkt_type 配置数据包类型。
  *
- * \retval randomValue    32 bits random value
- */
-uint32_t SX126xGetRandom( void );
-
-/*!
- * \brief Sets the radio in sleep mode
+ *@remark 默认情况下，一旦有数据包发送或收到数据包，芯片自动返回待机 RC 模式
+ *超时前尚未完全传输。这种行为可以通过@ref sx126x_set_rx_tx_fallback_mode。
  *
- * \param [in]  sleepConfig   The sleep configuration describing data
- *                            retention and RTC wake-up
- */
-void SX126xSetSleep( SleepParams_t sleepConfig );
-
-/*!
- * \brief Sets the radio in configuration mode
+ *@remark 超时时间可以用以下公式计算：
+ *\f$ timeout\_duration\_ms = timeout_in_rtc_step \times *\frac{1}{64} \f$
  *
- * \param [in]  mode          The standby mode to put the radio into
- */
-void SX126xSetStandby( RadioStandbyModes_t mode );
-
-/*!
- * \brief Sets the radio in FS mode
- */
-void SX126xSetFs( void );
-
-/*!
- * \brief Sets the radio in transmission mode
+ *@remark 最大值为 SX126X_MAX_TIMEOUT_IN_RTC_STEP (即 262 143 ms)
  *
- * \param [in]  timeout       Structure describing the transmission timeout value
- */
-void SX126xSetTx( uint32_t timeout );
-
-/*!
- * \brief Sets the radio in reception mode
+ *@remark 如果超时参数为 0，则不使用超时。
  *
- * \param [in]  timeout       Structure describing the reception timeout value
- */
-void SX126xSetRx( uint32_t timeout );
-
-/*!
- * \brief Sets the radio in reception mode with Boosted LNA gain
+ *@param [in] context 芯片实现上下文。
+ *@param [in] timeout_in_rtc_step Tx 操作的超时配置
  *
- * \param [in]  timeout       Structure describing the reception timeout value
- */
-void SX126xSetRxBoosted( uint32_t timeout );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_tx_with_timeout_in_rtc_step( const void* context, const uint32_t timeout_in_rtc_step );
 
-/*!
- * \brief Sets the Rx duty cycle management parameters
+/**
+ *@brief 将芯片设置为接收模式
  *
- * \param [in]  rxTime        Structure describing reception timeout value
- * \param [in]  sleepTime     Structure describing sleep timeout value
- */
-void SX126xSetRxDutyCycle( uint32_t rxTime, uint32_t sleepTime );
-
-/*!
- * \brief Sets the radio in CAD mode
- */
-void SX126xSetCad( void );
-
-/*!
- * \brief Sets the radio in continuous wave transmission mode
- */
-void SX126xSetTxContinuousWave( void );
-
-/*!
- * \brief Sets the radio in continuous preamble transmission mode
- */
-void SX126xSetTxInfinitePreamble( void );
-
-/*!
- * \brief Decide which interrupt will stop the internal radio rx timer.
+ *@remark 使用该命令前，需要使用@ref sx126x_set_pkt_type 配置数据包类型。
  *
- * \param [in]  enable          [0: Timer stop after header/syncword detection
- *                               1: Timer stop after preamble detection]
- */
-void SX126xSetStopRxTimerOnPreambleDetect( bool enable );
-
-/*!
- * \brief Set the number of symbol the radio will wait to validate a reception
+ *@remark 默认情况下，芯片一收到数据包就自动返回待机RC模式
+ *或者如果在超时之前没有收到数据包。这种行为可以通过@ref 改变
+ *sx126x_set_rx_tx_fallback_mode。
  *
- * \param [in]  SymbNum          number of LoRa symbols
- */
-void SX126xSetLoRaSymbNumTimeout( uint8_t SymbNum );
-
-/*!
- * \brief Sets the power regulators operating mode
+ *@remark timeout 参数可以有以下特殊值：
  *
- * \param [in]  mode          [0: LDO, 1:DC_DC]
- */
-void SX126xSetRegulatorMode( RadioRegulatorMode_t mode );
-
-/*!
- * \brief Calibrates the given radio block
+ *|特殊值 |含义 |
+ *| ---------------| ---------------------------------------------------------------------------|
+ *| SX126X_RX_SINGLE_MODE | Single：芯片保持RX模式直到有接收发生，然后切换到待机RC |
  *
- * \param [in]  calibParam    The description of blocks to be calibrated
- */
-void SX126xCalibrate( CalibrationParams_t calibParam );
-
-/*!
- * \brief Calibrates the Image rejection depending of the frequency
+ *@param [in] context 芯片实现上下文。
+ *@param [in] timeout_in_ms 以毫秒为单位的 Rx 操作超时配置
  *
- * \param [in]  freq    The operating frequency
- */
-void SX126xCalibrateImage( uint32_t freq );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_rx( const void* context, const uint32_t timeout_in_ms );
 
-/*!
- * \brief Activate the extention of the timeout when long preamble is used
+/**
+ *@brief 将芯片设置为接收模式
  *
- * \param [in]  enable      The radio will extend the timeout to cope with long preamble
- */
-void SX126xSetLongPreamble( uint8_t enable );
-
-/*!
- * \brief Sets the transmission parameters
+ *@remark 使用该命令前，需要使用@ref sx126x_set_pkt_type 配置数据包类型。
  *
- * \param [in]  paDutyCycle     Duty Cycle for the PA
- * \param [in]  hpMax          0 for sx1261, 7 for sx1262
- * \param [in]  deviceSel       1 for sx1261, 0 for sx1262
- * \param [in]  paLut           0 for 14dBm LUT, 1 for 22dBm LUT
- */
-void SX126xSetPaConfig( uint8_t paDutyCycle, uint8_t hpMax, uint8_t deviceSel, uint8_t paLut );
-
-/*!
- * \brief Defines into which mode the chip goes after a TX / RX done
+ *@remark 默认情况下，芯片一收到数据包就自动返回待机RC模式
+ *或者如果在超时之前没有收到数据包。这种行为可以通过@ref 改变
+ *sx126x_set_rx_tx_fallback_mode。
  *
- * \param [in]  fallbackMode    The mode in which the radio goes
- */
-void SX126xSetRxTxFallbackMode( uint8_t fallbackMode );
-
-/*!
- * \brief Write data to the radio memory
+ *@remark 超时时长通过以下方式获得：
+ *\f$ timeout\_duration\_ms = timeout_in_rtc_step \times \frac{1}{64} \f$
  *
- * \param [in]  address       The address of the first byte to write in the radio
- * \param [in]  buffer        The data to be written in radio's memory
- * \param [in]  size          The number of bytes to write in radio's memory
- */
-void SX126xWriteRegisters( uint16_t address, uint8_t *buffer, uint16_t size );
-
-/*!
- * \brief Read data from the radio memory
+ *@remark 最大超时值为 SX126X_MAX_TIMEOUT_IN_RTC_STEP（即 262 143 毫秒）。
  *
- * \param [in]  address       The address of the first byte to read from the radio
- * \param [out] buffer        The buffer that holds data read from radio
- * \param [in]  size          The number of bytes to read from radio's memory
- */
-void SX126xReadRegisters( uint16_t address, uint8_t *buffer, uint16_t size );
-
-/*!
- * \brief Write data to the buffer holding the payload in the radio
+ *@remark timeout 参数可以有以下特殊值：
  *
- * \param [in]  offset        The offset to start writing the payload
- * \param [in]  buffer        The data to be written (the payload)
- * \param [in]  size          The number of byte to be written
- */
-void SX126xWriteBuffer( uint8_t offset, uint8_t *buffer, uint8_t size );
-
-/*!
- * \brief Read data from the buffer holding the payload in the radio
+ *|特殊值 |含义 |
+ *| ---------------| ---------------------------------------------------------------------------|
+ *| SX126X_RX_SINGLE_MODE | Single：芯片保持RX模式直到有接收发生，然后切换到待机RC |
+ *| SX126X_RX_CONTINUOUS |连续：芯片即使在接收到数据包后仍保持在 RX 模式 |
  *
- * \param [in]  offset        The offset to start reading the payload
- * \param [out] buffer        A pointer to a buffer holding the data from the radio
- * \param [in]  size          The number of byte to be read
- */
-void SX126xReadBuffer( uint8_t offset, uint8_t *buffer, uint8_t size );
-
-/*!
- * \brief   Sets the IRQ mask and DIO masks
+ *@param [in] context 芯片实现上下文。
+ *@param [in] timeout_in_rtc_step Rx 操作的超时配置
  *
- * \param [in]  irqMask       General IRQ mask
- * \param [in]  dio1Mask      DIO1 mask
- * \param [in]  dio2Mask      DIO2 mask
- * \param [in]  dio3Mask      DIO3 mask
- */
-void SX126xSetDioIrqParams( uint16_t irqMask, uint16_t dio1Mask, uint16_t dio2Mask, uint16_t dio3Mask );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_rx_with_timeout_in_rtc_step( const void* context, const uint32_t timeout_in_rtc_step );
 
-/*!
- * \brief Returns the current IRQ status
+/**
+ *@brief 配置停止接收超时的事件
  *
- * \retval      irqStatus     IRQ status
- */
-uint16_t SX126xGetIrqStatus( void );
-
-/*!
- * \brief Indicates if DIO2 is used to control an RF Switch
+ *@remark 这两个选项是：
+ *-同步字/标头检测（默认）
+ *-前导检测
  *
- * \param [in] enable     true of false
- */
-void SX126xSetDio2AsRfSwitchCtrl( uint8_t enable );
-
-/*!
- * \brief Indicates if the Radio main clock is supplied from a tcxo
+ *@param [in] context 芯片实现上下文。
+ *@param [in] enable 如果为 true，则计时器在同步字/标头检测时停止。
  *
- * \param [in] tcxoVoltage     voltage used to control the TCXO
- * \param [in] timeout         time given to the TCXO to go to 32MHz
- */
-void SX126xSetDio3AsTcxoCtrl( RadioTcxoCtrlVoltage_t tcxoVoltage, uint32_t timeout );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_stop_timer_on_preamble( const void* context, const bool enable );
 
-/*!
- * \brief Sets the RF frequency
+/**
+ *@brief 将芯片设置为带占空比的接收模式
  *
- * \param [in]  frequency     RF frequency [Hz]
- */
-void SX126xSetRfFrequency( uint32_t frequency );
-
-/*!
- * \brief Sets the radio for the given protocol
+ *@param [in] context 芯片实现上下文。
+ *@param [in] rx_time_in_ms Rx 周期的超时时间 -以毫秒为单位
+ *@param [in] sleep_time_in_ms 睡眠周期的长度 -以毫秒为单位
  *
- * \param [in]  packetType    [PACKET_TYPE_GFSK, PACKET_TYPE_LORA]
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_rx_duty_cycle( const void* context, const uint32_t rx_time_in_ms,
+                                          const uint32_t sleep_time_in_ms );
+
+/**
+ *@brief 将芯片设置为带占空比的接收模式
  *
- * \remark This method has to be called before SetRfFrequency,
- *         SetModulationParams and SetPacketParams
- */
-void SX126xSetPacketType( RadioPacketTypes_t packetType );
-
-/*!
- * \brief Gets the current radio protocol
+ *@remark Rx 模式持续时间定义为：
+ *\f$ rx\_duration\_ms = rx_time \times \frac{1}{64} \f$
  *
- * \retval      packetType    [PACKET_TYPE_GFSK, PACKET_TYPE_LORA]
- */
-RadioPacketTypes_t SX126xGetPacketType( void );
-
-/*!
- * \brief Sets the transmission parameters
+ *@remark 睡眠模式持续时间定义为：
+ *\f$ sleep\_duration\_ms = sleep_time \times \frac{1}{64} \f$
  *
- * \param [in]  power         RF output power [-18..13] dBm
- * \param [in]  rampTime      Transmission ramp up time
- */
-void SX126xSetTxParams( int8_t power, RadioRampTimes_t rampTime );
-
-/*!
- * \brief Set the modulation parameters
+ *@remark 最大超时值为 0xFFFFFF（即 511 秒）。
  *
- * \param [in]  modParams     A structure describing the modulation parameters
- */
-void SX126xSetModulationParams( ModulationParams_t *modParams );
-
-/*!
- * \brief Sets the packet parameters
+ *@param [in] context 芯片实现上下文。
+ *@param [in] rx_time Rx 周期的超时时间
+ *@param [in] sleep_time 睡眠时间长度
  *
- * \param [in]  packetParams  A structure describing the packet parameters
- */
-void SX126xSetPacketParams( PacketParams_t *packetParams );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_rx_duty_cycle_with_timings_in_rtc_step( const void*    context,
+                                                                   const uint32_t rx_time_in_rtc_step,
+                                                                   const uint32_t sleep_time_in_rtc_step );
 
-/*!
- * \brief Sets the Channel Activity Detection (CAD) parameters
+/**
+ *@brief 将芯片设置为 CAD（通道活动检测）模式
  *
- * \param [in]  cadSymbolNum   The number of symbol to use for CAD operations
- *                             [LORA_CAD_01_SYMBOL, LORA_CAD_02_SYMBOL,
- *                              LORA_CAD_04_SYMBOL, LORA_CAD_08_SYMBOL,
- *                              LORA_CAD_16_SYMBOL]
- * \param [in]  cadDetPeak     Limit for detection of SNR peak used in the CAD
- * \param [in]  cadDetMin      Set the minimum symbol recognition for CAD
- * \param [in]  cadExitMode    Operation to be done at the end of CAD action
- *                             [LORA_CAD_ONLY, LORA_CAD_RX, LORA_CAD_LBT]
- * \param [in]  cadTimeout     Defines the timeout value to abort the CAD activity
- */
-void SX126xSetCadParams( RadioLoRaCadSymbols_t cadSymbolNum, uint8_t cadDetPeak, uint8_t cadDetMin, RadioCadExitModes_t cadExitMode, uint32_t cadTimeout );
-
-/*!
- * \brief Sets the data buffer base address for transmission and reception
+ *@remark LoRa 数据包类型应在调用此函数之前通过@ref sx126x_set_pkt_type 进行选择。
  *
- * \param [in]  txBaseAddress Transmission base address
- * \param [in]  rxBaseAddress Reception base address
- */
-void SX126xSetBufferBaseAddress( uint8_t txBaseAddress, uint8_t rxBaseAddress );
-
-/*!
- * \brief Gets the current radio status
+ *@remark 回退模式配置为@ref sx126x_set_cad_params。
  *
- * \retval      status        Radio status
- */
-RadioStatus_t SX126xGetStatus( void );
-
-/*!
- * \brief Returns the instantaneous RSSI value for the last packet received
+ *@param [in] context 芯片实现上下文。
  *
- * \retval      rssiInst      Instantaneous RSSI
- */
-int8_t SX126xGetRssiInst( void );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_cad( const void* context );
 
-/*!
- * \brief Gets the last received packet buffer status
+/**
+ *@brief 将芯片设置为 Tx 连续波（RF 音）。
  *
- * \param [out] payloadLength Last received packet payload length
- * \param [out] rxStartBuffer Last received packet buffer address pointer
- */
-void SX126xGetRxBufferStatus( uint8_t *payloadLength, uint8_t *rxStartBuffer );
-
-/*!
- * \brief Gets the last received packet payload length
+ *@remark 使用该命令前，需要使用@ref sx126x_set_pkt_type 配置数据包类型。
  *
- * \param [out] pktStatus     A structure of packet status
- */
-void SX126xGetPacketStatus( PacketStatus_t *pktStatus );
-
-/*!
- * \brief Returns the possible system errors
+ *@param [in] context 芯片实现上下文。
  *
- * \retval sysErrors Value representing the possible sys failures
- */
-RadioError_t SX126xGetDeviceErrors( void );
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_tx_cw( const void* context );
 
-/*!
- * \brief Clear all the errors in the device
- */
-void SX126xClearDeviceErrors( void );
-
-/*!
- * \brief Clears the IRQs
+/**
+ *@brief 在 Tx 无限前导（调制信号）中设置芯片。
  *
- * \param [in]  irq           IRQ(s) to be cleared
- */
-void SX126xClearIrqStatus( uint16_t irq );
+ *@remark 使用该命令前，需要使用@ref sx126x_set_pkt_type 配置数据包类型。
+ *
+ *@param [in] context 芯片实现上下文。
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_tx_infinite_preamble( const void* context );
 
-#endif // __SX126x_H__
+/**
+ *@brief 配置要使用的调节器模式
+ *
+ *@remark 需要调用这个函数来设置正确的稳压器模式，具体取决于 LDO 或 DC/DC on
+ *PCB 实现。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] mode 调节器模式配置。
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_reg_mode( const void* context, const sx126x_reg_mod_t mode );
+
+/**
+ *@brief 执行请求块的校准
+ *
+ *@remark 此函数只能在待机 RC 模式下调用
+ *
+ *@remark 芯片会在退出时返回待机 RC 模式。可以使用@ref 读出潜在的校准问题
+ *sx126x_get_device_errors 命令。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] param 包含要校准的块的掩码
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_cal( const void* context, const sx126x_cal_mask_t param );
+
+/**
+ *@brief 执行设备工作频段镜像抑制校准
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] freq_in_hz 用于图像校准的频率（Hz）
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_cal_img( const void* context, const uint32_t freq_in_hz );
+
+/**
+ *@brief 配置 PA（功率放大器）
+ *
+ *@details 此命令用于区分 SX1261 和 SX1262 /SX1268。使用此命令时，用户
+ *选择设备使用的 PA 及其配置。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] params 功放配置参数
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_pa_cfg( const void* context, const sx126x_pa_cfg_params_t* params );
+
+/**
+ *@brief 设置成功发送或接收后使用的芯片模式。
+ *
+ *@remark 在 Rx Duty Cycle 模式或 Auto TxRx 期间不考虑此设置。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] fallback_mode 选择的后备模式
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_rx_tx_fallback_mode( const void* context, const sx126x_fallback_modes_t fallback_mode );
+
+//
+// Registers and Buffer Access
+//
+
+/**
+ *@brief 将数据写入寄存器内存空间。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] address 开始写操作的寄存器内存地址
+ *@param [in] buffer 要写入内存的字节缓冲区。
+ *@param [in] size 要写入内存的字节数，从地址开始
+ *
+ *@see sx126x_read_register
+ */ 
+sx126x_status_t sx126x_write_register( const void* context, const uint16_t address, const uint8_t* buffer,
+                                       const uint8_t size );
+
+/**
+ *@brief 从寄存器内存空间读取数据。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] address 开始读操作​​的寄存器内存地址
+ *@param [in] buffer 要填充寄存器数据的字节缓冲区
+ *@param [in] size 从内存中读取的字节数，从地址开始
+ *
+ *@see sx126x_write_register
+ */ 
+sx126x_status_t sx126x_read_register( const void* context, const uint16_t address, uint8_t* buffer,
+                                      const uint8_t size );
+
+/**
+ *@brief 将数据写入无线电 Tx 缓冲区内存空间。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] offset 芯片Tx缓冲区中的起始地址
+ *@param [in] buffer 要写入无线电缓冲区的字节缓冲区
+ *@param [in] size 要写入 Tx 无线电缓冲区的字节数
+ *
+ *@returns 操作状态
+ *
+ *@see sx126x_read_buffer
+ */ 
+sx126x_status_t sx126x_write_buffer( const void* context, const uint8_t offset, const uint8_t* buffer,
+                                     const uint8_t size );
+
+/**
+ *@brief 从无线电 Rx 缓冲区内存空间读取数据。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] offset 芯片Rx缓冲区中的起始地址
+ *@param [in] buffer 要填充来自 Rx 无线电缓冲区的内容的字节缓冲区
+ *@param [in] size 要从 Rx 无线电缓冲区读取的字节数
+ *
+ *@returns 操作状态
+ *
+ *@see sx126x_write_buffer
+ */ 
+sx126x_status_t sx126x_read_buffer( const void* context, const uint8_t offset, uint8_t* buffer, const uint8_t size );
+
+//
+// DIO and IRQ Control Functions
+//
+
+/**
+ *@brief 设置哪些中断信号被重定向到专用的 DIO 引脚
+ *
+ *@remark 默认情况下，不重定向中断信号。
+ *
+ *@remark 中断在系统范围内启用之前不会发生，即使它被重定向到特定的 DIO。
+ *
+ *@remark DIO 引脚将保持有效，直到通过调用 @ref 清除所有重定向的中断信号
+ *sx126x_clear_irq_status。
+ *
+ *@remark DIO2 和 DIO3 与其他功能共享。见@ref sx126x_set_dio2_as_rf_sw_ctrl 和@ref
+ *sx126x_set_dio3_as_tcxo_ctrl
+ *
+ *@param [in] 上下文芯片实现上下文。
+ *@param [in] irq_mask 保存系统中断掩码的变量
+ *@param [in] dio1_mask 保存 dio1 中断掩码的变量
+ *@param [in] dio2_mask 保存 dio2 中断掩码的变量
+ *@param [in] dio3_mask 保存 dio3 中断掩码的变量
+ *
+ *@returns 操作状态
+ *
+ *@see sx126x_clear_irq_status, sx126x_get_irq_status, sx126x_set_dio2_as_rf_sw_ctrl, sx126x_set_dio3_as_tcxo_ctrl
+ */ 
+
+sx126x_status_t sx126x_set_dio_irq_params( const void* context, const uint16_t irq_mask, const uint16_t dio1_mask,
+                                           const uint16_t dio2_mask, const uint16_t dio3_mask );
+
+/**
+ *@brief 获取系统中断状态
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [out] irq 指向保存系统中断状态的变量的指针
+ *
+ *@returns 操作状态
+ *
+ *@see sx126x_clear_irq_status
+ */ 
+sx126x_status_t sx126x_get_irq_status( const void* context, sx126x_irq_mask_t* irq );
+
+/**
+ *@brief 清除选定的系统中断
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] irq_mask 保存要清除的系统中断的变量
+ *
+ *@returns 操作状态
+ *
+ *@see sx126x_get_irq_status
+ */ 
+sx126x_status_t sx126x_clear_irq_status( const void* context, const sx126x_irq_mask_t irq_mask );
+
+/**
+ *@brief 清除设置的任何无线电 irq 状态标志并返回该标志
+ *被清除。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [out] irq 指向一个变量的指针，用于保存系统中断状态。可以为 NULL。
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_get_and_clear_irq_status( const void* context, sx126x_irq_mask_t* irq );
+
+/**
+ *@brief 配置嵌入式射频开关控制
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] enable 如果设置为 true 启用此功能
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_dio2_as_rf_sw_ctrl( const void* context, const bool enable );
+
+/**
+ *@brief 配置嵌入式 TCXO 开关控制
+ *
+ *@remark 该函数只能在待机 RC 模式下调用。
+ *
+ *@remark 在开始任何需要 TCXO 的操作之前，芯片将等待超时发生。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] tcxo_voltage 用于为 TCXO 供电的电压。
+ *@param [in] timeout TCXO 稳定所需的时间。
+ *
+ *@returns 操作状态
+ *
+ */ 
+sx126x_status_t sx126x_set_dio3_as_tcxo_ctrl( const void* context, const sx126x_tcxo_ctrl_voltages_t tcxo_voltage,
+                                              const uint32_t timeout );
+
+//
+// RF Modulation and Packet-Related Functions
+//
+
+/**
+ *@brief 为未来的无线电操作设置射频频率。
+ *
+ *@remark 只有在选择了数据包类型后才能调用此命令。
+ *
+ *@param [in] context 芯片实现上下文。
+ *@param [in] freq_in_hz 为无线电操作设置的频率（Hz）
+ *
+ *@returns 操作状态
+ */ 
+sx126x_status_t sx126x_set_rf_freq( const void* context, const uint32_t freq_in_hz );
+
+/**
+ * @brief 为未来的无线电操作设置 RF 频率 - PLL 步骤中的参数
+ *
+ * @remark 67 / 5000
+翻译结果
+只有在选择了数据包类型后才能调用该命令
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] freq 为无线电操作设置的 PLL 步骤中的频率
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_rf_freq_in_pll_steps( const void* context, const uint32_t freq );
+
+/**
+ * @brief 设置数据包类型
+ *
+ * @param [in] context Chip implementation context.
+ *
+ * @param [in] pkt_type 要设置的数据包类型
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_pkt_type( const void* context, const sx126x_pkt_type_t pkt_type );
+
+/**
+ * @brief 获取当前数据包类型
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] pkt_type 指向保存数据包类型的变量的指针
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_pkt_type( const void* context, sx126x_pkt_type_t* pkt_type );
+
+/**
+ * @brief 设置 TX 功率和功率放大器斜坡时间的参数 
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] pwr_in_dbm The Tx output power in dBm
+ * @param [in] ramp_time The ramping time configuration for the PA
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_tx_params( const void* context, const int8_t pwr_in_dbm,
+                                      const sx126x_ramp_time_t ramp_time );
+
+/**
+ * @brief 设置 GFSK 数据包的调制参数
+ *
+ * @remark The command @ref sx126x_set_pkt_type must be called prior to this
+ * one.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] params The structure of GFSK modulation configuration
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_gfsk_mod_params( const void* context, const sx126x_mod_params_gfsk_t* params );
+
+/**
+ * @brief 设置 LoRa 数据包的调制参数
+ * @remark The command @ref sx126x_set_pkt_type must be called prior to this one.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] params The structure of LoRa modulation configuration
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_lora_mod_params( const void* context, const sx126x_mod_params_lora_t* params );
+
+/**
+ * @brief 设置GFSK报文的报文参数
+ *
+ * @remark The command @ref sx126x_set_pkt_type must be called prior to this
+ * one.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] params The structure of GFSK packet configuration
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_gfsk_pkt_params( const void* context, const sx126x_pkt_params_gfsk_t* params );
+
+/**
+ * @brief 设置 LoRa 数据包的数据包参数
+ *
+ * @remark The command @ref sx126x_set_pkt_type must be called prior to this one.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] params The structure of LoRa packet configuration
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_lora_pkt_params( const void* context, const sx126x_pkt_params_lora_t* params );
+
+/**
+ * @brief 设置CAD操作参数
+ *
+ * @remark The command @ref sx126x_set_pkt_type must be called prior to this one.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] params The structure of CAD configuration
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_cad_params( const void* context, const sx126x_cad_params_t* params );
+
+/**
+ * @brief 为 Tx 和 Rx 操作设置缓冲区起始地址
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] tx_base_address The start address used for Tx operations
+ * @param [in] rx_base_address The start address used for Rx operations
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_buffer_base_address( const void* context, const uint8_t tx_base_address,
+                                                const uint8_t rx_base_address );
+
+sx126x_status_t sx126x_set_lora_symb_nb_timeout( const void* context, const uint8_t nb_of_symbs );
+
+//
+// Communication Status Information
+//
+
+/**
+ * @brief 获取芯片状态
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] radio_status Pointer to a structure holding the radio status
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_status( const void* context, sx126x_chip_status_t* radio_status );
+
+/**
+ * @brief 获取 LoRa 和 GFSK Rx 操作的当前 Rx 缓冲区状态
+ *
+ * @details This function is used to get the length of the received payload and the start address to be used when
+ * reading data from the Rx buffer.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] rx_buffer_status Pointer to a structure to store the current status
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_rx_buffer_status( const void* context, sx126x_rx_buffer_status_t* rx_buffer_status );
+
+/**
+ * @brief 获取最后收到的 GFSK 数据包的状态 
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] pkt_status Pointer to a structure to store the packet status
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_gfsk_pkt_status( const void* context, sx126x_pkt_status_gfsk_t* pkt_status );
+
+/**
+ * @brief 获取最后收到的 LoRa 数据包的状态
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] pkt_status Pointer to a structure to store the packet status
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_lora_pkt_status( const void* context, sx126x_pkt_status_lora_t* pkt_status );
+
+/**
+ * @brief 获取瞬时RSSI值。
+ *
+ * @remark This function shall be called when in Rx mode.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] rssi_in_dbm Pointer to a variable to store the RSSI value in dBm
+ *
+ * @returns 运行状态
+ *
+ * @see sx126x_set_rx
+ */
+sx126x_status_t sx126x_get_rssi_inst( const void* context, int16_t* rssi_in_dbm );
+
+/**
+ * @brief 获取GFSK通信的统计信息
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] stats Pointer to a structure to store GFSK-related statistics
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_gfsk_stats( const void* context, sx126x_stats_gfsk_t* stats );
+
+/**
+ * @brief 获取有关 LoRa 通信的统计信息
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] stats Pointer to a structure to store LoRa-related statistics
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_lora_stats( const void* context, sx126x_stats_lora_t* stats );
+
+/**
+ * @brief 重置 Lora 和 GFSK 通信的所有统计数据
+ *
+ * @param [in] context Chip implementation context.
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_reset_stats( const void* context );
+
+//
+// Miscellaneous
+//
+
+/**
+ * @brief 执行芯片的硬复位 
+ *
+ * @param [in] context Chip implementation context.
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_reset( const void* context );
+
+/**
+ * @brief 从睡眠模式唤醒
+ *
+ * @param [in]  context Chip implementation context.
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_wakeup( const void* context );
+
+/**
+ * @brief 获取所有活动错误的列表
+ *
+ * @param [in] context Chip implementation context.
+ * @param [out] errors Pointer to a variable to store the error list
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_device_errors( const void* context, sx126x_errors_mask_t* errors );
+
+/**
+ * @brief 清除所有活动错误
+ *
+ * @param [in] context Chip implementation context.
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_clear_device_errors( const void* context );
+
+/**
+ * @brief 获取与 GFSK Rx 带宽相对应的参数，该参数立即高于最小请求的带宽。
+ *
+ * @param [in] bw Minimum required bandwith in Hz
+ * @param [out] param Pointer to a value to store the parameter
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_get_gfsk_bw_param( const uint32_t bw, uint8_t* param );
+
+/**
+ * @brief 获取给定 LoRa 带宽的实际值（以hz为单位） 
+ *
+ * @param [in] bw LoRa bandwidth parameter
+ *
+ * @returns 以hz为单位的实际 LoRa 带宽
+ */
+uint32_t sx126x_get_lora_bw_in_hz( sx126x_lora_bw_t bw );
+
+/**
+ * @brief Compute the numerator for LoRa time-on-air computation.
+ * 计算 LoRa 播出时间计算的分子。
+ *
+ * @remark To get the actual time-on-air in second, this value has to be divided by the LoRa bandwidth in Hertz.
+ * 要获得以秒为单位的实际播出时间，必须将该值除以以赫兹为单位的 LoRa 带宽。
+ *
+ * @param [in] pkt_p Pointer to the structure holding the LoRa packet parameters
+ * @param [in] mod_p Pointer to the structure holding the LoRa modulation parameters
+ *
+ * @returns LoRa time-on-air numerator
+ * LoRa 播出时间分子
+ */
+uint32_t sx126x_get_lora_time_on_air_numerator( const sx126x_pkt_params_lora_t* pkt_p,
+                                                const sx126x_mod_params_lora_t* mod_p );
+
+/**
+ * @brief 获取 LoRa 传输的播出时间（以毫秒为单位） 
+ *
+ * @param [in] pkt_p Pointer to a structure holding the LoRa packet parameters
+ * @param [in] mod_p Pointer to a structure holding the LoRa modulation parameters
+ *
+ * @returns LoRa 传输的空中时间值（以毫秒为单位）
+ */
+uint32_t sx126x_get_lora_time_on_air_in_ms( const sx126x_pkt_params_lora_t* pkt_p,
+                                            const sx126x_mod_params_lora_t* mod_p );
+
+/**
+ * @brief 计算 GFSK 播出时间计算的分子。
+ *
+ * @remark To get the actual time-on-air in second, this value has to be divided by the GFSK bitrate in bits per
+ * second.
+ * 要获得以秒为单位的实际播出时间，必须将该值除以 GFSK 比特率（以每秒比特数为单位）。
+ *
+ * @param [in] pkt_p Pointer to the structure holding the GFSK packet parameters
+ *
+ * @returns GFSK 播出时间分子
+ */
+uint32_t sx126x_get_gfsk_time_on_air_numerator( const sx126x_pkt_params_gfsk_t* pkt_p );
+
+/**
+ * @brief 获取 GFSK 传输的播出时间（以毫秒为单位）
+ *
+ * @param [in] pkt_p Pointer to a structure holding the GFSK packet parameters
+ * @param [in] mod_p Pointer to a structure holding the GFSK modulation parameters
+ *
+ * @returns GFSK 传输的空中时间值（以毫秒为单位）
+ */
+uint32_t sx126x_get_gfsk_time_on_air_in_ms( const sx126x_pkt_params_gfsk_t* pkt_p,
+                                            const sx126x_mod_params_gfsk_t* mod_p );
+
+/**
+ * @brief 生成一个或多个 32 位随机数。
+ *
+ * @remark A valid packet type must have been configured with @ref sx126x_set_pkt_type
+ *         before using this command.
+ *
+ * @param [in]  context Chip implementation context.
+ * @param [out] numbers Array where numbers will be stored.
+ * @param [in]  n Number of desired random numbers.
+ *
+ * @returns 运行状态
+ *
+ * This code can potentially result in interrupt generation. It is the responsibility of
+ * the calling code to disable radio interrupts before calling this function,
+ * and re-enable them afterwards if necessary, or be certain that any interrupts
+ * generated during this process will not cause undesired side-effects in the software.
+ *
+ * Please note that the random numbers produced by the generator do not have a uniform or Gaussian distribution. If
+ * uniformity is needed, perform appropriate software post-processing.
+ * 
+ * 此代码可能会导致中断生成。 调用代码有责任在调用此函数之前禁用无线电中断，然后在必要时重新启用它们，或者确保在此过程中产生的任何中断不会对软件造成不良副作用。
+ *
+ * 请注意，生成器产生的随机数不具有均匀分布或高斯分布。 如果需要一致性，请执行适当的软件后处理。
+ * /
+sx126x_status_t sx126x_get_random_numbers( const void* context, uint32_t* numbers, unsigned int n );
+
+/**
+ * @brief Get the number of PLL steps for a given frequency in Hertz
+ * 以赫兹为单位获取给定频率的 PLL 步数
+ *
+ * @param [in] freq_in_hz Frequency in Hertz
+ *
+ * @returns Number of PLL steps
+ */
+uint32_t sx126x_convert_freq_in_hz_to_pll_step( uint32_t freq_in_hz );
+
+/**
+ * @brief Get the number of RTC steps for a given timeout in millisecond
+ * 以毫秒为单位获取给定超时的 RTC 步数
+ *
+ * @param [in] timeout_in_ms Timeout in millisecond
+ *
+ * @returns Number of RTC steps
+ */
+uint32_t sx126x_convert_timeout_in_ms_to_rtc_step( uint32_t timeout_in_ms );
+
+//
+// Registers access
+//
+
+/**
+ * @brief Configure the boost mode in reception
+ * 在接收中配置升压模式
+ *
+ * @remark This configuration is not kept in the retention memory. Rx boosted mode shall be enabled each time the chip
+ * leaves sleep mode.
+ * 此配置不保存在保留内存中。 每次芯片离开睡眠模式时，都应启用 Rx 升压模式。
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] state Boost mode activation
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_cfg_rx_boosted( const void* context, const bool state );
+
+/**
+ * @brief Configure the sync word used in GFSK packet
+ * 配置 GFSK 数据包中使用的同步字
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] sync_word Buffer holding the sync word to be configured
+ * @param [in] sync_word_len Sync word length in byte
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_gfsk_sync_word( const void* context, const uint8_t* sync_word, const uint8_t sync_word_len );
+
+/**
+ * @brief Configure the sync word used in LoRa packet
+ * 配置 LoRa 数据包中使用的同步字
+ *
+ * @remark In the case of a LoRaWAN use case, the two following values are specified:
+ *   - 0x12 for a private LoRaWAN network (default)
+ *   - 0x34 for a public LoRaWAN network
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] sync_word Sync word to be configured
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_lora_sync_word( const void* context, const uint8_t sync_word );
+
+/**
+ * @brief Configure the seed used to compute CRC in GFSK packet
+ * 配置用于计算 GFSK 数据包中 CRC 的种子
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] seed Seed value used to compute the CRC value
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_gfsk_crc_seed( const void* context, uint16_t seed );
+
+/**
+ * @brief Configure the polynomial used to compute CRC in GFSK packet
+ * 配置GFSK包中用于计算CRC的多项式
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] polynomial Polynomial value used to compute the CRC value
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_gfsk_crc_polynomial( const void* context, const uint16_t polynomial );
+
+/**
+ * @brief Configure the whitening seed used in GFSK packet
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] seed Seed value used in data whitening
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_gfsk_whitening_seed( const void* context, const uint16_t seed );
+
+/**
+ * @brief Configure the Tx PA clamp
+ *
+ * @remark Workaround - On the SX1262, during the chip initialization, calling this function optimize the PA clamping
+ * threshold. The call must be done after a Power On Reset, or a wake-up from cold Start.(see DS_SX1261-2_V1.2 datasheet
+ * chapter 15.2)
+ *
+ * @param [in] context Chip implementation context.
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_cfg_tx_clamp( const void* context );
+
+/**
+ * @brief Stop the RTC and clear the related event
+ * 停止RTC并清除相关事件
+ *
+ * @remark Workaround - It is advised to call this function after ANY reception with timeout active sequence, which
+ * stop the RTC and clear the timeout event, if any (see DS_SX1261-2_V1.2 datasheet chapter 15.4)
+ * 解决方法 - 建议在任何接收超时活动序列后调用此函数，这会停止 RTC 并清除超时事件（如果有）（请参阅 DS_SX1261-2_V1.2 数据表第 15.4 章）
+ *
+ * @param [in] context Chip implementation context.
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_stop_rtc( const void* context );
+
+/**
+ * @brief Configure the Over Current Protection (OCP) value
+ * 配置过流保护 (OCP) 值 
+ *
+ * @remark The maximum value that can be configured is 63 (i.e. 157.5 mA)
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] ocp_in_step_of_2_5_ma OCP value given in steps of 2.5 mA
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_ocp_value( const void* context, const uint8_t ocp_in_step_of_2_5_ma );
+
+/**
+ * @brief Configure the internal trimming capacitor values
+ * 配置内部微调电容值
+ *
+ * @remark The device is fitted with internal programmable capacitors connected independently to the pins XTA and XTB of
+ * the device. Each capacitor can be controlled independently in steps of 0.47 pF added to the minimal value 11.3pF.
+ *
+ * @param [in] context Chip implementation context.
+ * @param [in] trimming_cap_xta Value for the trimming capacitor connected to XTA pin
+ * @param [in] trimming_cap_xtb Value for the trimming capacitor connected to XTB pin
+ *
+ * @returns 运行状态
+ */
+sx126x_status_t sx126x_set_trimming_capacitor_values( const void* context, const uint8_t trimming_cap_xta,
+                                                      const uint8_t trimming_cap_xtb );
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // SX126X_H
+
+/* --- EOF ------------------------------------------------------------------ */
